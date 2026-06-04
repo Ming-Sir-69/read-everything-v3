@@ -1,0 +1,7 @@
+{
+  "gemini": "your-google-ai-studio-key-here",
+  "nvidia_nim": "your-nvidia-nim-key-here",
+  "dashscope": "your-dashscope-key-here",
+  "deepseek": "your-deepseek-key-here",
+  "moonshot": "your-moonshot-key-here"
+}

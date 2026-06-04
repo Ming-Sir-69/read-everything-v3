@@ -1,0 +1,47 @@
+# API keys & credentials — NEVER commit real keys
+scripts/read_everything_config.json
+*.key
+*.pem
+*.p12
+*.pfx
+*_secret*
+*_credential*
+config.local.*
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+.DS_Store?
+._*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+.eggs/
+
+# Test output
+scripts/bench_output/
+
+# Temporary
+*.tmp
+*.temp
+/tmp/
+
+# Whisper models
+*.bin
