@@ -1,245 +1,185 @@
 # <picture><source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.png"><img alt="Read Everything v3" src="assets/hero.png" width="100%"></picture>
 
-**任何文件 → Markdown。干净、结构化、AI 就绪。**
+**把文件转换为 Markdown，供人和 AI 按需阅读。**
 
-Read Everything v3 将 PDF、Office 文档、图片、音频、视频转换为 Markdown 文件，保存在原文件旁边。不污染上下文，AI 按需读取。
+Read Everything v3 根据文件类型选择 MarkItDown、视觉 OCR 或语音转写路径，将输出保存在原文件旁边，例如 `document.pdf.md`。适合整理 Office 文档、文字 PDF、扫描件与音视频转写材料；生成内容仍需要复核。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-green)](https://www.python.org/)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)]()
-[![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?logo=docker)]()
+[![Python](https://img.shields.io/badge/Python-3-green)](https://www.python.org/)
 
----
-
-## 为什么选择 v3
-
-| 痛点 | v3 方案 |
-|------|---------|
-| AI 读文件 → 全部倒进上下文 | 写入 `.md` 文件到原文旁边 — AI 只读需要的 |
-| PDF 类型差异大（文字/工程图/扫描件） | 本地 VL 模型自动分类，走最优路线 |
-| OCR 模型数字幻觉 | 交叉验证：2轮 → 差异 → 3轮 → 没有共识就不输出 |
-| API 费用不可控 | 本地分类免费。Gemini Flash + NVIDIA NIM 免费。日常零成本 |
-
----
+仓库维护者：[Ming-Sir-69](https://github.com/Ming-Sir-69)。基础转换使用 Microsoft MarkItDown；其他组件的归属与链接见[致谢](#致谢)。
 
 ## 快速开始
 
-### macOS / Linux
+从仓库根目录安装原有 Python 依赖，再转换一个可信的文件：
 
 ```bash
-# 1. 安装系统依赖
-brew install ollama       # macOS
-# sudo apt install ollama # Linux
-
-# 2. 拉取本地视觉模型（一次性，约 6GB）
-ollama pull qwen2.5vl:7b
-
-# 3. 安装 Python 依赖
 pip install "markitdown[all]" pypdfium2 pypdf dashscope openai requests Pillow
-
-# 4. 配置 API 密钥
-cp scripts/read_everything_config.example.json scripts/read_everything_config.json
-# 编辑 scripts/read_everything_config.json 填入真实密钥
-
-# 5. 运行
-python3 scripts/read_everything_v3.py document.pdf
-# → document.pdf.md 已生成
+python3 scripts/read_everything_v3.py document.docx
+# 输出：document.docx.md
 ```
+
+Office 与结构化文档走 MarkItDown。文字 PDF 可走文本提取；PDF/图片的类型判定使用本机 Ollama，未能完成分类时会使用代码内的默认分类。环境与依赖版本需要在自己的机器上确认，仓库尚未提供锁定的 Python 依赖清单。
+
+### 需要视觉 OCR 时
+
+本地分类模型为 `qwen2.5vl:7b`，服务地址固定为 `http://localhost:11434`。已有 Ollama 后可按现有说明准备模型和启动服务：
+
+```bash
+ollama pull qwen2.5vl:7b
+ollama serve
+```
+
+将示例配置复制到**脚本所在目录**，填写对应服务的 Key：
+
+```bash
+cp scripts/read_everything_config.example.json scripts/read_everything_config.json
+python3 scripts/read_everything_v3.py document.pdf --verbose
+```
+
+当前代码读取 `scripts/read_everything_config.json`，不会自动读取 `~/.read_everything_config.json`。部分旧支持文档仍写有 home 目录路径，请以脚本的 `CONFIG_PATH` 为准。示例配置含占位值，真实配置不得提交到 Git。
+
+| 配置键 | 当前用途 | 服务入口 |
+| --- | --- | --- |
+| `gemini` | Gemini 2.5 Flash，首选视觉 OCR/描述 | [Google AI Studio](https://aistudio.google.com/apikey) |
+| `nvidia_nim` | NVIDIA NIM 的 Qwen3.5，视觉 OCR 备选 | [NVIDIA Build](https://build.nvidia.com) |
+| `dashscope` | Qwen ASR 云端语音转写 | [阿里云百炼](https://bailian.console.aliyun.com) |
+
+服务可用性、模型、价格和额度由各服务方决定，本文不承诺免费额度或免绑卡。云端分支会向相应服务提交输入内容，处理私密材料前请确认可上传范围。示例中的 `deepseek`、`moonshot` 键未被当前核心脚本使用。
 
 ### Docker
 
+仓库提供的镜像以 Python 3.13 构建，安装 Python 依赖和 ffmpeg。先从本地文件转换开始：
+
 ```bash
 docker build -t read-everything-v3 .
-docker run --rm -v $(pwd):/data -v $(pwd)/scripts/read_everything_config.json:/app/scripts/read_everything_config.json read-everything-v3 document.pdf
+docker run --rm -v "$PWD:/data" read-everything-v3 document.docx
 ```
+
+需要云端配置时，挂载到脚本实际读取的位置：
+
+```bash
+docker run --rm \
+  -v "$PWD:/data" \
+  -v "$PWD/scripts/read_everything_config.json:/app/read_everything_config.json:ro" \
+  read-everything-v3 document.pdf
+```
+
+容器中的脚本位于 `/app/read_everything_v3.py`，所以配置路径是 `/app/read_everything_config.json`。镜像没有安装 Ollama、Whisper CLI 或本地模型；分类服务固定指向容器自身的 localhost，不能默认访问宿主机 Ollama。视觉分类与本地音视频分支需要另外准备匹配环境。
+
+上述 PDF 示例在分类服务不可用时按 TEXT 路由进行文本提取，不执行云端 OCR；仅挂载云端配置不会改变这个回退。
 
 ### Windows
 
+原说明提供 Python 入口，也可使用 Docker 或 WSL2：
+
 ```powershell
-# 推荐使用 WSL2 或 Docker。本地 pip 方式：
 pip install "markitdown[all]" pypdfium2 pypdf dashscope openai requests Pillow
-python scripts\read_everything_v3.py document.pdf
+python scripts\read_everything_v3.py document.docx
 ```
 
-#### 配置 API 密钥
+本地 Whisper/ffmpeg 路径目前按 macOS 写死，不能据此保证 Windows 的音视频回退可用。优先从 Office/结构化文档开始确认环境。
 
-将模板文件 `scripts/read_everything_config.example.json` 复制到 `~/.read_everything_config.json`，然后填入你的密钥：
+## 格式与处理方式
 
-```bash
-cp scripts/read_everything_config.example.json ~/.read_everything_config.json
-# 编辑 ~/.read_everything_config.json 填入真实 Key
-```
+以下是当前代码中的路由，表示实现入口，不是对所有文件的转换成功保证。
 
-> ⚠️ **绝不提交 `~/.read_everything_config.json` 到 GitHub。** 它已在 `.gitignore` 中拦截。模板文件不包含真实密钥。
+| 输入 | 处理方式 |
+| --- | --- |
+| `.docx .pptx .xlsx .xls` | MarkItDown |
+| `.epub .html .csv .json .xml .ipynb .zip .msg` | MarkItDown |
+| `.pdf` | 本地视觉分类后走文本提取、图文合并或 OCR |
+| `.jpg .jpeg .png .webp .bmp .gif .tiff` | 本地视觉分类；文档类 OCR、照片描述、其他类跳过 |
+| `.wav .mp3 .m4a .ogg .flac .opus .aac` | 云端 Qwen ASR，失败后尝试本地 Whisper |
+| `.mp4 .mov .avi .mkv .webm` | 复用音频处理路径；不分析视频画面 |
+| `.txt .md .py .js .ts .sh .yaml .yml .toml` | 直接读取并另存为 Markdown |
 
----
+注意：JSON/CSV 走结构化文档分支，并非原文直接复制；音视频输出是转写结果，视频关键帧分析尚未提供。
 
-## API 密钥（三个平台，全部免费）
+## 架构与 OCR 复核
 
-| 平台 | 用途 | 免费额度 | 一键直达 |
-|------|------|---------|---------|
-| **Google AI Studio** | Gemini 2.5 Flash OCR（首选） | 1,500 次/天 | [🔗 获取 Key](https://aistudio.google.com/apikey) |
-| **NVIDIA NIM** | Qwen3.5-397B OCR（备选） | 5,000 免费积分 | [🔗 获取 Key](https://build.nvidia.com) |
-| **阿里云百炼 DashScope** | 语音转文字 qwen-asr | 100 万 token 试用 | [🔗 获取 Key](https://bailian.console.aliyun.com) |
-
-> **三个平台都无需绑定信用卡。** 日常使用完全够用。
-
-所有 Key 写入 `~/.read_everything_config.json`（在你的 home 目录下，不在仓库内 — **绝不提交 API 密钥**）。
-
----
-
-## 支持格式
-
-| 输入 | 引擎 | 输出 |
-|------|------|------|
-| `.pdf`（纯文字） | MarkItDown (pdfplumber) | 结构化 Markdown |
-| `.pdf`（工程图纸） | Gemini Flash 交叉验证（3 轮） + 空间解读 | Markdown |
-| `.pdf`（图文混合） | MarkItDown 文字层 + Gemini OCR 图片层合并 | Markdown |
-| `.pdf`（扫描件） | Gemini Flash 交叉验证（3 轮） | Markdown |
-| `.docx .pptx .xlsx .xls` | MarkItDown | Markdown |
-| `.epub .html .csv .json .xml .ipynb .zip .msg` | MarkItDown | Markdown |
-| `.jpg .jpeg .png .webp .bmp`（文档类） | Gemini Flash 交叉验证（3 轮） OCR | Markdown |
-| `.jpg .jpeg .png`（实拍照片） | AI 描述（单轮） | Markdown |
-| `.wav .mp3 .m4a .ogg .flac` | qwen-asr 云端 / whisper-cpp 本地 | 转写文本 |
-| `.mp4 .mov .avi .mkv` | ffmpeg 提取音频 → whisper（仅提取音频转写） | 转写文本 |
-| `.txt .md .json .csv .py` | 直接读取 | 原文 |
-
----
-
-## 架构一览
-
-```
+```text
 输入文件
-  │
-  ├─ .docx/.pptx/.xlsx/.xls → MarkItDown ───────────────→ .md ✅
-  ├─ .epub/.html/.csv/.json/... → MarkItDown ────────────→ .md ✅
-  ├─ .wav/.mp3/.ogg → qwen-asr / whisper-cpp ────────────→ .md ✅
-  ├─ .mp4/.mov → ffmpeg → whisper ───────────────────────→ .md ✅
-  │
-  ├─ .pdf → [qwen2.5vl:7b 本地 VL] 分类：
-  │   ├─ TEXT（纯文字）: MarkItDown 直接提取 ──────────────→ .md ✅
-  │   ├─ ENGINEERING（工程图）: Gemini Flash 交叉验证 + 空间解读 → .md ✅
-  │   ├─ MIXED（图文混合）: MarkItDown 文字 + Gemini OCR 合并 → .md ✅
-  │   └─ OTHER（扫描件）: 同 ENGINEERING ────────────────→ .md ✅
-  │
-  └─ .jpg/.png → [qwen2.5vl:7b 本地 VL] 分类：
-      ├─ TEXT_IMAGE/POSTER: Gemini Flash ×2 轮 OCR ─────→ .md ✅
-      ├─ PHOTO（实拍）: AI 描述 ─────────────────────────→ .md ✅
-      └─ OTHER（艺术图）: 跳过 ──────────────────────────→ ∅
+├─ Office / 结构化格式 → MarkItDown
+├─ 纯文本 → 直接读取
+├─ 音频 / 视频 → 云端 ASR / 本地 Whisper
+└─ PDF / 图片 → Ollama 类型判定
+   ├─ 文字 PDF → 文本提取
+   ├─ 图文混合 PDF → 文字层 + OCR 合并
+   ├─ 工程图 / 扫描 PDF / 文档图片 → 多轮 OCR
+   ├─ 实拍照片 → 单轮描述
+   └─ 其他图片 → 跳过
 ```
 
-### 交叉验证引擎（非 TEXT 类型启用）
+OCR 优先调用 Gemini，失败时尝试 NVIDIA NIM。前两轮结果使用文本相似度比较；存在差异时增加第三轮。当前实现是串行调用。第三轮仍有分歧时会输出带警告的结果；部分调用失败分支会保留已有单轮结果，并非始终等到共识才输出。
 
-```
-第 1 轮 + 第 2 轮 — 相同提示词，首选 Gemini Flash（失败则切 NVIDIA）
-  ├─ 两轮一致 → 直接输出 ✅（实测大多数场景到此即通过）
-  └─ 不一致 → 分析差异 → 优化提示词 → 第 3 轮
-      ├─ 第 3 轮与某一轮一致 → 输出共识内容 ✅
-      └─ 三轮各不同 → 输出并标注 ⚠️ 警告（极少发生）
-```
+因此，多轮一致不等于事实正确，也不保证数字或工程尺寸准确。输出中的 `verified`、`rounds` 字段是程序记录，不能替代人工校对；重要数据应回看原件。
 
-> 两轮交叉验证在实际测试中准确率极高，第三轮作为兜底保障存在。
+## 依赖与环境边界
 
-### PDF 分类
+| 依赖 | 用途 |
+| --- | --- |
+| `markitdown` | Office、结构化文档与文字 PDF 转换 |
+| `pypdfium2`、`pypdf` | PDF 页面渲染与文字处理 |
+| Ollama、`qwen2.5vl:7b` | 本地 PDF/图片类型判定 |
+| `requests` | Gemini 调用 |
+| `openai` | NVIDIA NIM 的兼容 API 客户端 |
+| `dashscope` | 云端音频转写 |
+| Whisper CLI、ffmpeg、本地语音模型 | 本地音视频回退 |
 
-首页渲染 scale=1.2 → `qwen2.5vl:7b`（Ollama 本地，免费）→ 输出一个分类词。
+本地回退路径当前固定为 `/opt/homebrew/bin/whisper-cli`、`/opt/homebrew/bin/ffmpeg` 与 `/tmp/whisper-models/ggml-large-v3-turbo.bin`，模型和可执行文件不随仓库提供。Python 依赖安装不自动准备这些系统组件。
 
-| 分类 | 处理方式 |
-|------|---------|
-| `TEXT` | MarkItDown 提取文本层。不需大模型。 |
-| `MIXED` | MarkItDown 文字 + 渲染页 → Gemini OCR 图片内容 → 合并 |
-| `ENGINEERING` | 全部页面 → Gemini Flash OCR + 空间解读（网格坐标 → 尺寸区域 → 部件映射） |
-| `OTHER` | 同 ENGINEERING（扫描件无文本层） |
+## 目录导航
 
----
+| 位置 | 内容 |
+| --- | --- |
+| [scripts/read_everything_v3.py](scripts/read_everything_v3.py) | 转换与 CLI 入口 |
+| [scripts/read_everything_config.example.json](scripts/read_everything_config.example.json) | Key 占位模板 |
+| [Dockerfile](Dockerfile) | 镜像构建与入口 |
+| [SKILL.md](SKILL.md) | AI 工作流定义 |
+| [references/architecture.md](references/architecture.md) | 原架构说明 |
+| [references/boundary-matrix.md](references/boundary-matrix.md) | 工具选择边界 |
+| [references/v2-v3-migration.md](references/v2-v3-migration.md) | 迁移记录 |
+| [SUPPORT.md](SUPPORT.md)、[SECURITY.md](SECURITY.md) | 帮助与漏洞报告方式 |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 社区行为准则 |
+| `assets/` | 封面图 |
 
-## 依赖
+## 状态与后续方向
 
-| 依赖 | 用途 | 安装 |
-|------|------|------|
-| `markitdown` | Office/结构化文档转换 | `pip install "markitdown[all]"` |
-| `pypdfium2` | PDF 渲染为图片 | `pip install pypdfium2` |
-| `pypdf` | PDF 文本提取 | `pip install pypdf` |
-| `ollama` | 本地 VL 模型服务 | `brew install ollama` (macOS) / [ollama.com](https://ollama.com) |
-| `qwen2.5vl:7b` | PDF/图片分类 | `ollama pull qwen2.5vl:7b`（约 6GB） |
-| `dashscope` | 语音转写 (qwen-asr) | `pip install dashscope` |
-| `openai` | NVIDIA NIM API 兼容 | `pip install openai` |
-| `requests` | Gemini API 调用 | `pip install requests` |
+代码包含 PDF/图片分类、多轮 OCR、工程图解读与模型降级路径。实际结果受输入质量、环境与外部服务影响，仓库文档未提供足以概括所有场景的性能结论。
 
----
+原路线图保留以下待完成方向：
 
-## 项目结构
-
-```
-read-everything-v3/
-├── README.md                    # 本文
-├── LICENSE                      # MIT
-├── SECURITY.md                  # 安全漏洞报告
-├── SUPPORT.md                   # 帮助 & 常见问题
-├── CODE_OF_CONDUCT.md           # 社区行为准则
-├── Dockerfile                   # 容器化部署
-├── .gitignore                   # 凭证 & 系统文件保护
-│
-├── SKILL.md                     # Claude Code Skill 定义
-│
-├── scripts/
-│   └── read_everything_v3.py    # 核心引擎（约 600 行）
-│
-├── references/
-│   ├── architecture.md          # 完整架构规范
-│   └── boundary-matrix.md       # 工具选择边界矩阵
-│
-└── assets/
-    ├── hero.png                 # 封面图（浅色模式）
-    └── hero-dark.png            # 封面图（深色模式）
-```
-
----
-
-## 路线图
-
-- [x] PDF 四分类（TEXT / MIXED / ENGINEERING / OTHER）
-- [x] 图片四分类（TEXT_IMAGE / POSTER / PHOTO / OTHER）
-- [x] 交叉验证引擎（2 轮比对 → 必要时 3 轮兜底）
-- [x] 工程图空间解读
-- [x] 三层降级（Gemini Flash → NVIDIA NIM → 停止）
-- [ ] 视频关键帧提取 + 画面视觉分析
-- [ ] MCP Server 模式（模型上下文协议）
-- [ ] 批量转换 + 进度条
-- [ ] MarkItDown OCR 插件集成（markitdown-ocr）
-
----
+- 视频关键帧与画面分析。
+- MCP Server 模式。
+- 批量转换与进度显示。
+- MarkItDown OCR 插件集成。
 
 ## 常见问题
 
-**问：开源到 GitHub 会不会泄漏我的 API Key？**
-答：不会。所有 Key 从 `~/.read_everything_config.json` 读取 — 该文件在你的 home 目录，不在仓库内。`.gitignore` 已拦截所有凭证模式。可以安全地 push 到 GitHub。
+**找不到 API Key？** 当前读取脚本同目录的 `read_everything_config.json`；本地仓库运行时放在 `scripts/`，容器挂载到 `/app/`。不要提交真实 Key。
 
-**问：为什么用 MarkItDown + Gemini 而不是一个工具全搞定？**
-答：MarkItDown 擅长结构化文档（Word/PPT/Excel/文字 PDF），100% 离线运行。Gemini 擅长视觉 OCR，近乎零错误率且免费。v3 分类器自动为每种文件选择最佳工具。
+**输出数字可信吗？** 多轮文本一致性只能帮助发现分歧，不能消除模型识别错误。重要数字、字段与工程尺寸需要回看原文件。
 
-**问：Gemini 和 NVIDIA 同时挂了怎么办？**
-答：v3 停止并告知你。不会降级到 DashScope（实测：26→25AWG 数字识别错误，工业领域不可接受）。
+**Gemini 与 NVIDIA 都不可用？** 首轮两者均失败会返回错误；后续轮失败的处理方式不同，可能保留已有结果。请阅读输出与警告。
 
-**问：工程图 OCR 准确率怎么样？**
-答：交叉验证（2 轮）在测试样本上实现 100% 字段准确率。26AWG、394±1、L7GCP014-DT-R — 全部通过多轮交叉验证。
-
----
+**输出写到哪里？** 写入原文件旁的 `<输入文件名>.md`，同名文件会被覆盖。使用可信文件，并确保输出目录可写。
 
 ## 参与贡献
 
-欢迎贡献！详见 [GitHub Issues](https://github.com/Ming-Sir-69/read-everything-v3/issues) 和 [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)。
+欢迎通过 [Issues](https://github.com/Ming-Sir-69/read-everything-v3/issues) 或 Pull Request 提交可复现的格式问题、环境兼容性与文档修正。请注明输入类型、平台、依赖版本和脱敏错误；涉及私密文件时使用最小化示例。漏洞报告方式见 [SECURITY.md](SECURITY.md)，社区规范见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
 
 ## 致谢
 
-本项目受到 [**Microsoft MarkItDown**](https://github.com/microsoft/markitdown)（2026 年 6 月由微软 AutoGen 团队推出）的启发，将其作为核心文档转换引擎。
+| 项目/服务 | 用途 | 来源 |
+| --- | --- | --- |
+| Microsoft MarkItDown | 文档转换基础引擎 | [microsoft/markitdown](https://github.com/microsoft/markitdown) |
+| Ollama | 本地视觉模型服务 | [ollama.com](https://ollama.com) |
+| Google Gemini | 首选云端 OCR | [Google AI Studio](https://aistudio.google.com) |
+| NVIDIA NIM | 备选云端 OCR | [NVIDIA Build](https://build.nvidia.com) |
+| 阿里云 DashScope | 云端语音转写 | [百炼](https://bailian.console.aliyun.com) |
 
-| 参考项目 | 用途 | 链接 |
-|---------|------|------|
-| **Microsoft MarkItDown** | Office 文档 / 结构化格式 → Markdown 转换引擎 | [github.com/microsoft/markitdown](https://github.com/microsoft/markitdown) |
-| **Ollama** | 本地视觉模型服务（qwen2.5vl 分类） | [ollama.com](https://ollama.com) |
-| **Google Gemini** | 首选云端 OCR（Gemini 2.5 Flash） | [aistudio.google.com](https://aistudio.google.com) |
-| **NVIDIA NIM** | 备选云端 OCR（Qwen3.5-397B） | [build.nvidia.com](https://build.nvidia.com) |
+第三方组件和服务仍适用各自的许可与使用条件。
 
 ## 许可证
 
