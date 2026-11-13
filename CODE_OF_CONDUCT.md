@@ -20,5 +20,5 @@ Examples of unacceptable behavior:
 
 ## Enforcement
 
-Instances of abusive behavior may be reported to: 1254406948@qq.com.
+Instances of abusive behavior may be reported by opening an issue in this repository or through GitHub's private reporting.
 All complaints will be reviewed and investigated promptly and fairly.

@@ -10,7 +10,7 @@
 
 **Do NOT report security vulnerabilities through public GitHub issues.**
 
-Email: **1254406948@qq.com**  
+Please use GitHub's private vulnerability reporting for this repository (Security tab → Report a vulnerability).  
 Subject: `[Security] Read Everything v3 — Vulnerability Report`
 
 Response time: within 72 hours.
